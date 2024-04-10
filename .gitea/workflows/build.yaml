@@ -1,0 +1,44 @@
+name: Build
+run-name: ${{ gitea.actor }} build
+on: [push]
+
+jobs:
+  Build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+        with:
+          github-server-url: 'http://git.derekgottlieb.com:3000'
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ vars.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=
+            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: make build
+        uses: docker/build-push-action@v5
+        with:
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+      - name: Set build tag
+        shell: bash
+        run: |
+          echo "BUILD_TAG=${GITHUB_SHA:0:7}" >> $GITHUB_ENV
+      - name: deploy via portainer webhook
+        uses: muinmomin/webhook-action@v1.0.0
+        with:
+          url: ${{ vars.PORTAINER_WEBHOOK }}
+      - name: notify discord
+        uses: Ilshidur/action-discord@0.3.2
+        env:
+          DISCORD_WEBHOOK: ${{ vars.DISCORD_WEBHOOK }}
+        with:
+          args: "${{ github.repository }} build ${{ env.BUILD_TAG }}"
